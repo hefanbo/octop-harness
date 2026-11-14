@@ -24,6 +24,7 @@ from langchain_core.messages import (
 )
 
 from octop_harness.api_key_scope import take_api_key_override
+from octop_harness.tool_env_scope import TOOL_ENV_KEY
 
 
 @dataclass
@@ -51,7 +52,10 @@ class ChatRequest:
             ``craft``). Ask/Plan force ``skills=[]`` and hide MCP tools.
         agent_id: Optional agent identifier recorded in
             ``RunnableConfig.configurable`` (e.g. for logging middleware).
-        configurable: Extra ``RunnableConfig.configurable`` entries.
+        configurable: Extra ``RunnableConfig.configurable`` entries. The
+            ``tool_env`` entry is special: it is bound to a task-local scope
+            for built-in tools and stripped from the run config so secrets
+            never reach checkpoint metadata.
         metadata: Extra ``RunnableConfig.metadata`` entries.
         recursion_limit: Override the default LangGraph recursion limit.
     """
@@ -142,6 +146,10 @@ class ChatRequest:
         # ``self.configurable`` for scope binding (see ``api_key_scope``).
         take_api_key_override(configurable)
         _restrict_ask_plan_config(configurable)
+        # Per-call tool credentials must not reach checkpoint metadata; the
+        # agent reads them from ``ChatRequest.configurable`` and binds a
+        # task-local scope instead.
+        configurable.pop(TOOL_ENV_KEY, None)
 
         config: dict[str, Any] = {"configurable": configurable}
         if self.metadata:

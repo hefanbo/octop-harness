@@ -24,6 +24,7 @@ def _bare_agent() -> HarnessAgent:
     agent._cancel_events = {}
     agent._hitl_resume_configs = {}
     agent._hitl_resume_api_keys = {}
+    agent._hitl_resume_tool_env = {}
     agent._thread_models = {}
     agent._agent_id = None
     agent._config = _Config()  # type: ignore[assignment]
@@ -98,8 +99,8 @@ async def test_stream_cancel_preempts_blocked_protocol() -> None:
     def _prepare_call(
         _request: ChatRequest | str | dict[str, Any],
         _protocol: str | None,
-    ) -> tuple[Any, Any, _Proto]:
-        return [], {}, _Proto()
+    ) -> tuple[Any, Any, _Proto, dict[str, str]]:
+        return [], {}, _Proto(), {}
 
     agent._prepare_call = _prepare_call  # type: ignore[method-assign]
 
