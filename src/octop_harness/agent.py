@@ -21,6 +21,7 @@ from langchain.agents.middleware import PIIMiddleware
 
 from octop_harness.api_key_scope import (
     api_key_override_from,
+    api_key_override_provider_from,
     api_key_override_scope,
     bind_api_key_override,
 )
@@ -223,6 +224,8 @@ class HarnessAgent:
         # Per-call API key for paused threads; rides alongside
         # ``_hitl_resume_configs`` (which carries the key-free run config).
         self._hitl_resume_api_keys: dict[str, str | None] = {}
+        # Provider the paused key is scoped to, if the host tagged it.
+        self._hitl_resume_api_key_providers: dict[str, str | None] = {}
         # Per-call tool env for paused threads; rides alongside
         # ``_hitl_resume_configs`` (which carries the key-free run config).
         self._hitl_resume_tool_env: dict[str, dict[str, str]] = {}
@@ -549,6 +552,7 @@ class HarnessAgent:
                 self._cancel_events[thread_id] = cancel_event
                 self._hitl_resume_configs.pop(thread_id, None)
                 self._hitl_resume_api_keys.pop(thread_id, None)
+                self._hitl_resume_api_key_providers.pop(thread_id, None)
                 self._hitl_resume_tool_env.pop(thread_id, None)
             try:
                 with session_header_scope(prepared.thread_id):
@@ -565,6 +569,9 @@ class HarnessAgent:
                                     "configurable": deepcopy(config["configurable"]),
                                 }
                                 self._hitl_resume_api_keys[thread_id] = api_key_override_from(prepared.configurable)
+                                self._hitl_resume_api_key_providers[thread_id] = api_key_override_provider_from(
+                                    prepared.configurable
+                                )
                                 self._hitl_resume_tool_env[thread_id] = tool_env
                             yield chunk
             finally:
@@ -616,7 +623,10 @@ class HarnessAgent:
         async with self._invocation():
             with (
                 session_header_scope(thread_id),
-                api_key_override_scope(self._hitl_resume_api_keys.get(thread_id)),
+                api_key_override_scope(
+                    self._hitl_resume_api_keys.get(thread_id),
+                    provider=self._hitl_resume_api_key_providers.get(thread_id),
+                ),
                 tool_env_scope(self._hitl_resume_tool_env.get(thread_id)),
             ):
                 async with contextlib.aclosing(resume_stream(thread_id, decisions, config, **options)) as chunks:
@@ -627,6 +637,7 @@ class HarnessAgent:
         if not paused:
             self._hitl_resume_configs.pop(thread_id, None)
             self._hitl_resume_api_keys.pop(thread_id, None)
+            self._hitl_resume_api_key_providers.pop(thread_id, None)
             self._hitl_resume_tool_env.pop(thread_id, None)
 
     async def stream_events(
@@ -1080,6 +1091,7 @@ class HarnessAgent:
             return
         self._hitl_resume_configs.clear()
         self._hitl_resume_api_keys.clear()
+        self._hitl_resume_api_key_providers.clear()
         self._hitl_resume_tool_env.clear()
         if self._owns_model_factory:
             self._model_factory.close()
@@ -1100,6 +1112,7 @@ class HarnessAgent:
             return
         self._hitl_resume_configs.clear()
         self._hitl_resume_api_keys.clear()
+        self._hitl_resume_api_key_providers.clear()
         self._hitl_resume_tool_env.clear()
         if self._owns_model_factory:
             await self._model_factory.aclose()
@@ -2055,14 +2068,17 @@ class HarnessAgent:
         """Normalize a request into ``(messages, config, protocol, tool_env)``.
 
         Shared by ``call`` / ``stream`` / ``stream_events``. Also binds the
-        request's per-call API key and tool env to task scopes (see
-        :mod:`octop_harness.api_key_scope` and :mod:`octop_harness.tool_env_scope`)
-        so they never have to ride in the graph config. The normalized
-        ``tool_env`` is returned so HITL pause can store it without re-parsing
-        the request.
+        request's per-call API key (and its optional provider scope) and tool
+        env to task scopes (see :mod:`octop_harness.api_key_scope` and
+        :mod:`octop_harness.tool_env_scope`) so they never have to ride in the
+        graph config. The normalized ``tool_env`` is returned so HITL pause can
+        store it without re-parsing the request.
         """
         req = ChatRequest.coerce(request)
-        bind_api_key_override(api_key_override_from(req.configurable))
+        bind_api_key_override(
+            api_key_override_from(req.configurable),
+            provider=api_key_override_provider_from(req.configurable),
+        )
         # Tool credentials live outside ``RunnableConfig``; rebind on every
         # entry (including an empty mapping) so one task cannot reuse a stale
         # key from an earlier invocation.

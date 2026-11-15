@@ -23,7 +23,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
-from octop_harness.api_key_scope import take_api_key_override
+from octop_harness.api_key_scope import take_api_key_override, take_api_key_override_provider
 from octop_harness.tool_env_scope import TOOL_ENV_KEY
 
 
@@ -145,6 +145,7 @@ class ChatRequest:
         # configurable values into checkpoint metadata. The key stays on
         # ``self.configurable`` for scope binding (see ``api_key_scope``).
         take_api_key_override(configurable)
+        take_api_key_override_provider(configurable)
         _restrict_ask_plan_config(configurable)
         # Per-call tool credentials must not reach checkpoint metadata; the
         # agent reads them from ``ChatRequest.configurable`` and binds a
