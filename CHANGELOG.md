@@ -13,10 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 内置搜索工具支持 `DEEPSEEK_SEARCH_ENDPOINT`（全局 Endpoint），未设置时仍用默认地址。
 - `HarnessAgentConfig.web_search_require_env`（默认 `True`）。设为 `False` 时，显式 `web_search_tools` 列表不检查 env 即可挂载；新增 `ToolAvailabilityMiddleware` 在每次模型调用前隐藏本轮既无调用级值、也无全局 env 的搜索工具（排在 `ToolsFilterMiddleware` 之后、tool search 之前）。
 - `configurable["api_key_override_provider"]`（可选）把按调用传入的 Key 限定到指定供应商：本轮路由到其他供应商时不再沿用该 Key，而是回退该供应商自己的静态 Key，避免个人密钥被发往别家端点。未设置该标签时保持原有「一把 Key 通用于所有供应商」的网关语义。
+- 托管 ACP 回合可以带上本轮的 MCP 服务器、会话模式和附加提示。YOLO 会切到代理公布的免审批模式，并自动放行未被硬拦截的权限请求。代理拒绝这批 MCP 时，会话改为不带这些工具继续。
 
 ### 变更
 
 - 内置搜索工具统一通过 `current_tool_env(...)` 读取 Key（调用级 scope > 进程 env），缺失 Key 的错误提示改为引导用户配置个人搜索密钥或由管理员配置全局 Key。
+
+### 修复
+
+- 配套 Memory 支持活动锁时，PG checkpoint 的调用、流式执行、恢复、历史读取及状态更新会与宿主裁剪协调，取消和提前关闭流也会等待图退出再释放锁。宿主可通过 `HarnessAgent.checkpoint_activity(thread_id)` 保护直接操作图的分叉等流程。
+- 将 octop-memory 最低依赖提高到 1.0.5。定时 checkpoint 裁剪在调用 Memory 裁剪器前跳过 PostgreSQL 共享表。宿主在核实线程归属并暂停该线程在所有宿主上的执行、恢复和分叉后，可用 1.0.5 的离线接口显式裁剪该线程。
+- SQLite 定时裁剪在已完成的纯根图线程上，把保留边界所需的旧消息增量合并到边界 checkpoint，再删除旧父链。
 
 ## [1.0.10] - 2026-11-15
 
