@@ -88,6 +88,11 @@ class TestSyncCloseSqliteConnection:
         assert raw is not None
         with pytest.raises(sqlite3.ProgrammingError):
             raw.execute("select 1")
+        # The helper closes the raw handle and asks aiosqlite to stop, but in a
+        # running loop it cannot await that stop future. Join the worker here so
+        # it cannot post a result to the event loop after pytest closes it.
+        conn._thread.join(timeout=5)
+        assert not conn._thread.is_alive()
 
     def test_close_without_connect_is_noop(self, tmp_path: Path) -> None:
         import aiosqlite
