@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 修复
+
+- 托管 ACP 智能体初始化时保留 checkpointer，从而可以往已有会话里追加消息。
+
+## [1.0.11] - 2026-11-17
+
 ### 新增
 
 - 工具可按调用注入凭据：`ChatRequest.configurable["tool_env"]` 传入 `str -> str` 映射，`to_runnable_config()` 会将其从 `RunnableConfig` 中弹出，`HarnessAgent` 在每次入口绑定到任务级 scope；值不会写入 checkpoint 元数据，HITL 暂停/恢复期间保持。
@@ -21,9 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 修复
 
-- 配套 Memory 支持活动锁时，PG checkpoint 的调用、流式执行、恢复、历史读取及状态更新会与宿主裁剪协调，取消和提前关闭流也会等待图退出再释放锁。宿主可通过 `HarnessAgent.checkpoint_activity(thread_id)` 保护直接操作图的分叉等流程。
-- 将 octop-memory 最低依赖提高到 1.0.5。定时 checkpoint 裁剪在调用 Memory 裁剪器前跳过 PostgreSQL 共享表。宿主在核实线程归属并暂停该线程在所有宿主上的执行、恢复和分叉后，可用 1.0.5 的离线接口显式裁剪该线程。
-- SQLite 定时裁剪在已完成的纯根图线程上，把保留边界所需的旧消息增量合并到边界 checkpoint，再删除旧父链。
+- Memory 支持活动锁时，checkpoint 的执行、恢复和读写会避开宿主裁剪；取消或提前结束也会等图退出再放锁。直接改图（如分叉）可调用 `HarnessAgent.checkpoint_activity(thread_id)`。
+- 最低依赖 octop-memory 1.0.5。定时裁剪跳过 PostgreSQL 共享表；宿主确认线程归属并暂停该线程后，可用离线接口按线程裁剪。SQLite 会把保留边界仍需要的旧消息并入边界 checkpoint，再删掉更早的父链。
 
 ## [1.0.10] - 2026-11-15
 
